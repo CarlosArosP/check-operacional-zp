@@ -9,6 +9,10 @@
     body{font-family:'Segoe UI',system-ui,sans-serif}
     .progress-bar{transition:width .5s ease}
     .modal-bg{backdrop-filter:blur(4px)}
+    .drag-handle{cursor:grab;user-select:none;}
+    .drag-handle:active{cursor:grabbing;}
+    .dragging{opacity:.35;transform:scale(.97);transition:all .15s;}
+    .drag-over{border-color:#0053e2 !important;background:#eff6ff !important;box-shadow:0 0 0 2px #0053e240;}
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -206,7 +210,14 @@
       <button onclick="agregarRutina()" class="mt-4 bg-[#0053e2] hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow">➕ Agregar</button>
     </div>
     <div class="bg-white rounded-xl shadow border border-gray-100 p-5 mb-8">
-      <h3 class="font-bold text-gray-700 mb-4 text-sm">📋 Rutinas Configuradas</h3>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-gray-700 text-sm">📋 Rutinas Configuradas</h3>
+        <button onclick="autoSortAndSave()" title="Ordena todas las rutinas por turno y bloque horario"
+          class="flex items-center gap-1.5 text-xs bg-[#ffc220] hover:bg-yellow-400 text-gray-900 font-bold px-3 py-1.5 rounded-lg shadow-sm transition-colors">
+          🔀 Ordenar por hora
+        </button>
+      </div>
+      <p class="text-xs text-gray-400 mb-3">⠿ Arrastra las tarjetas para reordenar manualmente.</p>
       <div id="config-rutinas-list" class="space-y-2"></div>
       <button onclick="cerrarAdmin()" class="mt-5 text-xs text-gray-400 hover:text-gray-600 underline">🔒 Cerrar sesión admin</button>
     </div>
@@ -607,21 +618,27 @@ function cerrarAdmin()    { adminOk=false; adminHash=''; toast('Sesión admin ce
 async function renderConfig() {
   loading(true, 'Cargando rutinas...');
   try {
-    const ruts = await get('/api/rutinas');
-    rutinas = ruts;
+    rutinas = await get('/api/rutinas');
     document.getElementById('config-rutinas-list').innerHTML = rutinas.map(r =>
-      `<div class="flex items-start justify-between gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm">
+      `<div id="rc-${r.id}" draggable="true"
+        ondragstart="onDragStart(event,${r.id})"
+        ondragover="onDragOver(event,${r.id})"
+        ondragleave="onDragLeave(event)"
+        ondrop="onDrop(event,${r.id})"
+        ondragend="onDragEnd(event)"
+        class="flex items-center gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm transition-colors select-none">
+        <span class="drag-handle text-gray-300 text-lg flex-shrink-0" title="Arrastrar para reordenar">⠿</span>
         <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1">
+          <div class="flex items-center gap-2 mb-0.5">
             <span class="text-xs font-bold px-2 py-0.5 rounded ${r.turno==='AM'?'bg-amber-100 text-amber-700':'bg-blue-100 text-blue-700'}">${r.turno}</span>
-            <span class="text-xs text-gray-400">${esc(r.horario)}</span>
-            <span class="font-semibold text-gray-800">${esc(r.rutina)}</span>
+            <span class="text-xs text-gray-400 font-mono">${esc(r.horario)}</span>
+            <span class="font-semibold text-gray-800 truncate">${esc(r.rutina)}</span>
           </div>
-          <p class="text-xs text-gray-500 truncate">${esc(r.accionable)}</p>
+          <p class="text-xs text-gray-500 truncate pl-0.5">${esc(r.accionable)}</p>
         </div>
         <div class="flex items-center gap-1 flex-shrink-0">
           <button onclick="editarRutina(${r.id})" class="text-[#0053e2] hover:bg-blue-50 px-2 py-1 rounded text-sm" title="Editar">✏️</button>
-          <button onclick="eliminarRutina(${r.id})" class="text-red-400 hover:text-red-600 text-xl leading-none px-1">×</button>
+          <button onclick="eliminarRutina(${r.id})" class="text-red-400 hover:text-red-600 text-xl leading-none px-1" title="Eliminar">×</button>
         </div>
       </div>`
     ).join('') || '<p class="text-gray-400 text-sm">Sin rutinas.</p>';
@@ -664,6 +681,80 @@ async function guardarEdicion() {
 
 function cerrarEditModal() { document.getElementById('edit-modal').classList.add('hidden'); }
 
+// ── Ordenar por hora ─────────────────────────────────────────────────
+function parseHorario(h) {
+  // "07:30-08:00" → 7*60+30 = 450  |  vacío o inválido → 9999 (al final)
+  const m = String(h||'').split('-')[0].match(/(\d{1,2}):(\d{2})/);
+  return m ? parseInt(m[1])*60 + parseInt(m[2]) : 9999;
+}
+
+async function autoSortAndSave(silently=false) {
+  rutinas.sort((a, b) => {
+    if (a.turno !== b.turno) return a.turno==='AM' ? -1 : 1;
+    return parseHorario(a.horario) - parseHorario(b.horario);
+  });
+  rutinas.forEach((r, i) => r.orden = i);
+  await saveOrder(silently);
+  await renderConfig();
+}
+
+async function saveOrder(silently=false) {
+  loading(true, 'Guardando orden...');
+  try {
+    await Promise.all(rutinas.map(r =>
+      put(`/api/rutinas/${r.id}`, {
+        turno:r.turno, horario:r.horario, rutina:r.rutina,
+        accionable:r.accionable, responsable:r.responsable,
+        evidencia:r.evidencia, orden:r.orden,
+        usuario:ADMIN_USER, password_hash:adminHash
+      })
+    ));
+    if (!silently) toast('✅ Orden guardado');
+  } catch(e) { toast('Error al guardar orden: '+e.message, false); }
+  finally { loading(false); }
+}
+
+// ── Drag & Drop handlers ─────────────────────────────────────────────
+let _dragId = null;
+
+function onDragStart(e, id) {
+  _dragId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => document.getElementById(`rc-${id}`)?.classList.add('dragging'), 0);
+}
+
+function onDragOver(e, id) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (id !== _dragId) {
+    document.querySelectorAll('#config-rutinas-list > div').forEach(el => el.classList.remove('drag-over'));
+    document.getElementById(`rc-${id}`)?.classList.add('drag-over');
+  }
+}
+
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function onDrop(e, targetId) {
+  e.preventDefault();
+  if (_dragId == null || _dragId === targetId) return;
+  const srcIdx = rutinas.findIndex(r => r.id === _dragId);
+  const tgtIdx = rutinas.findIndex(r => r.id === targetId);
+  if (srcIdx === -1 || tgtIdx === -1) return;
+  const [moved] = rutinas.splice(srcIdx, 1);
+  rutinas.splice(tgtIdx, 0, moved);
+  rutinas.forEach((r, i) => r.orden = i);
+  saveOrder(true).then(() => renderConfig());
+}
+
+function onDragEnd(e) {
+  _dragId = null;
+  document.querySelectorAll('#config-rutinas-list > div').forEach(el => {
+    el.classList.remove('dragging', 'drag-over');
+  });
+}
+
 async function agregarRutina() {
   const g = id => document.getElementById(id).value.trim();
   if (!g('new-rutina')||!g('new-accionable')) { toast('Rutina y Accionable son obligatorios.',false); return; }
@@ -676,7 +767,10 @@ async function agregarRutina() {
       orden, usuario:ADMIN_USER, password_hash:adminHash
     });
     ['new-horario','new-rutina','new-accionable','new-responsable','new-evidencia'].forEach(id=>document.getElementById(id).value='');
-    toast('✅ Rutina agregada'); await renderConfig();
+    // Recarga rutinas y auto-ordena por hora
+    rutinas = await get('/api/rutinas');
+    await autoSortAndSave(true);
+    toast('✅ Rutina agregada y ordenada por hora');
   } catch(e) { toast(e.message,false); }
   finally { loading(false); }
 }
