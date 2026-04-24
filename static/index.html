@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Check Operacional Diario – ZP</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    body{font-family:'Segoe UI',system-ui,sans-serif}
+    .progress-bar{transition:width .5s ease}
+    .modal-bg{backdrop-filter:blur(4px)}
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ── MODAL ADMIN LOGIN ─────────────────────────────────────────── -->
+<div id="pass-modal" class="hidden fixed inset-0 z-50 modal-bg bg-black/40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+    <h2 class="text-lg font-bold text-gray-800 mb-1">🔒 Acceso Admin</h2>
+    <p class="text-xs text-gray-500 mb-4">Solo el administrador puede editar rutinas.</p>
+    <input type="text" id="user-input" placeholder="Usuario"
+      class="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#0053e2] focus:outline-none mb-2"
+      onkeydown="if(event.key==='Enter')document.getElementById('pass-input').focus()"/>
+    <input type="password" id="pass-input" placeholder="Contraseña"
+      class="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#0053e2] focus:outline-none mb-2"
+      onkeydown="if(event.key==='Enter')submitPass()"/>
+    <p id="pass-error" class="text-xs text-red-500 h-4 mb-2"></p>
+    <div class="flex gap-2">
+      <button onclick="submitPass()" class="flex-1 bg-[#0053e2] text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700">Entrar</button>
+      <button onclick="closePassModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-bold hover:bg-gray-200">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL EDITAR RUTINA ───────────────────────────────────────── -->
+<div id="edit-modal" class="hidden fixed inset-0 z-50 modal-bg bg-black/40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <h2 class="text-lg font-bold text-gray-800 mb-4">✏️ Editar Rutina</h2>
+    <input type="hidden" id="edit-id"/>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+      <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Turno *</label>
+        <select id="edit-turno" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none">
+          <option value="AM">AM</option><option value="PM">PM</option></select></div>
+      <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Horario</label>
+        <input id="edit-horario" type="text" placeholder="ej: 09:00-10:00"
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+      <div class="flex flex-col gap-1 md:col-span-2"><label class="text-xs text-gray-500 font-medium">Rutina *</label>
+        <input id="edit-rutina" type="text"
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+      <div class="flex flex-col gap-1 md:col-span-2"><label class="text-xs text-gray-500 font-medium">Accionable *</label>
+        <textarea id="edit-accionable" rows="2"
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none resize-none"></textarea></div>
+      <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Responsable</label>
+        <input id="edit-responsable" type="text"
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+      <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Evidencia</label>
+        <input id="edit-evidencia" type="text"
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+    </div>
+    <p id="edit-error" class="text-xs text-red-500 min-h-[1rem] mt-2"></p>
+    <div class="flex gap-2 mt-4">
+      <button onclick="guardarEdicion()" class="flex-1 bg-[#0053e2] hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-bold">💾 Guardar</button>
+      <button onclick="cerrarEditModal()" class="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-bold">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── HEADER ────────────────────────────────────────────────────── -->
+<header class="bg-[#0053e2] text-white shadow-lg sticky top-0 z-20">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">⚡</span>
+      <div>
+        <h1 class="text-base font-bold leading-tight">Check Operacional Diario</h1>
+        <p class="text-xs text-blue-200">Hiper Líder · Zona de Pago</p>
+      </div>
+    </div>
+    <div id="header-pct" class="hidden text-right">
+      <div class="text-2xl font-bold text-[#ffc220]" id="hdr-pct-val">—</div>
+      <div class="text-xs text-blue-200">hoy</div>
+    </div>
+  </div>
+</header>
+
+<!-- ── LOCAL SELECTOR ────────────────────────────────────────────── -->
+<div class="bg-white border-b border-gray-200 shadow-sm">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+    <label class="text-sm font-bold text-gray-700 whitespace-nowrap">🏪 Local:</label>
+    <select id="local-select" onchange="switchLocal(this.value)"
+      class="border-2 border-[#0053e2] rounded-lg px-4 py-1.5 text-sm font-bold text-[#0053e2] bg-blue-50 focus:outline-none">
+      <option value="">— Selecciona tu local —</option>
+      <option value="93">Local 93</option><option value="94">Local 94</option>
+      <option value="96">Local 96</option><option value="99">Local 99</option>
+      <option value="120">Local 120</option><option value="121">Local 121</option>
+      <option value="456">Local 456</option><option value="618">Local 618</option>
+      <option value="670">Local 670</option><option value="929">Local 929</option>
+    </select>
+    <span id="local-badge" class="hidden px-3 py-1 bg-[#ffc220] text-gray-900 rounded-full text-xs font-bold"></span>
+  </div>
+</div>
+
+<!-- ── APP ───────────────────────────────────────────────────────── -->
+<div id="app-shell" class="hidden max-w-5xl mx-auto px-4 mt-4">
+  <div class="flex border-b border-gray-200 mb-5 overflow-x-auto">
+    <button onclick="showTab('hoy')"       id="tab-hoy"       class="px-4 py-2 text-sm font-semibold whitespace-nowrap border-b-2 border-[#0053e2] text-[#0053e2]">📋 Hoy</button>
+    <button onclick="showTab('historial')" id="tab-historial" class="px-4 py-2 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-500">📊 Historial</button>
+    <button onclick="showTab('comparar')"  id="tab-comparar"  class="px-4 py-2 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-500">🏆 Locales</button>
+    <button onclick="tabConfig()"          id="tab-config"    class="px-4 py-2 text-sm font-semibold whitespace-nowrap border-b-2 border-transparent text-gray-500">⚙️ Rutinas 🔒</button>
+  </div>
+
+  <!-- TAB HOY -->
+  <div id="tab-content-hoy">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium text-gray-700">Fecha:</label>
+        <input type="date" id="fecha-hoy" onchange="loadHoy()"
+          class="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#0053e2]"/>
+      </div>
+      <div id="summary-bar" class="flex items-center gap-4 text-sm font-semibold"></div>
+    </div>
+    <div class="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+      <div class="flex justify-between text-xs text-gray-500 mb-1">
+        <span>Progreso del día</span><span id="prog-label">0 / 0</span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+        <div id="prog-bar" class="progress-bar h-3 rounded-full bg-[#0053e2]" style="width:0%"></div>
+      </div>
+    </div>
+    <div id="tasks-container" class="space-y-4"></div>
+  </div>
+
+  <!-- TAB HISTORIAL -->
+  <div id="tab-content-historial" class="hidden">
+    <div class="grid grid-cols-3 gap-4 mb-5">
+      <div class="bg-[#0053e2] text-white rounded-xl p-4 text-center shadow">
+        <div class="text-4xl font-bold" id="kpi-promedio">—</div>
+        <div class="text-sm mt-1 text-blue-200">% Promedio</div>
+      </div>
+      <div class="bg-white border rounded-xl p-4 text-center shadow">
+        <div class="text-4xl font-bold text-gray-800" id="kpi-dias">—</div>
+        <div class="text-sm mt-1 text-gray-500">Días</div>
+      </div>
+      <div class="bg-[#ffc220] rounded-xl p-4 text-center shadow">
+        <div class="text-lg font-bold text-gray-900 whitespace-pre-line" id="kpi-mejor">—</div>
+        <div class="text-sm mt-1 text-gray-700">Mejor Día</div>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl shadow p-4 mb-5 border border-gray-100">
+      <h3 class="font-bold text-gray-700 mb-3 text-sm">📈 % Cumplimiento — últimos 30 días</h3>
+      <div style="position:relative;height:200px"><canvas id="chart-hist"></canvas></div>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-gray-100 p-4 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-gray-700 text-sm">📋 Detalle — <span id="hist-local-label" class="text-[#0053e2]"></span></h3>
+        <button onclick="exportarCSV()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg">⬇ CSV</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="bg-gray-50 text-gray-500 uppercase text-xs">
+            <th class="px-3 py-2 text-left">Fecha</th>
+            <th class="px-3 py-2 text-center">Hechas</th>
+            <th class="px-3 py-2 text-center">Total</th>
+            <th class="px-3 py-2 text-center">%</th>
+            <th class="px-3 py-2 text-center">AM</th>
+            <th class="px-3 py-2 text-center">PM</th>
+          </tr></thead>
+          <tbody id="hist-tbody" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB COMPARAR -->
+  <div id="tab-content-comparar" class="hidden">
+    <p class="text-sm text-gray-500 mb-4">Cumplimiento promedio de todos los locales — últimos 30 días.</p>
+    <div class="bg-white rounded-xl shadow p-5 mb-5 border border-gray-100">
+      <div style="position:relative;height:260px"><canvas id="chart-comparar"></canvas></div>
+    </div>
+    <div id="tabla-comparar" class="bg-white rounded-xl shadow border border-gray-100 p-4 mb-8 overflow-x-auto"></div>
+  </div>
+
+  <!-- TAB CONFIG (solo admin) -->
+  <div id="tab-content-config" class="hidden">
+    <div class="bg-white rounded-xl shadow border border-gray-100 p-5 mb-5">
+      <h3 class="font-bold text-gray-700 mb-4 text-sm">➕ Nueva Rutina</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Turno *</label>
+          <select id="new-turno" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none">
+            <option value="AM">AM</option><option value="PM">PM</option></select></div>
+        <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Horario</label>
+          <input id="new-horario" type="text" placeholder="ej: 09:00-10:00"
+            class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+        <div class="flex flex-col gap-1 md:col-span-2"><label class="text-xs text-gray-500 font-medium">Rutina *</label>
+          <input id="new-rutina" type="text"
+            class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+        <div class="flex flex-col gap-1 md:col-span-2"><label class="text-xs text-gray-500 font-medium">Accionable *</label>
+          <textarea id="new-accionable" rows="2"
+            class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none resize-none"></textarea></div>
+        <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Responsable</label>
+          <input id="new-responsable" type="text"
+            class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+        <div class="flex flex-col gap-1"><label class="text-xs text-gray-500 font-medium">Evidencia</label>
+          <input id="new-evidencia" type="text"
+            class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#0053e2] focus:outline-none"/></div>
+      </div>
+      <button onclick="agregarRutina()" class="mt-4 bg-[#0053e2] hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow">➕ Agregar</button>
+    </div>
+    <div class="bg-white rounded-xl shadow border border-gray-100 p-5 mb-8">
+      <h3 class="font-bold text-gray-700 mb-4 text-sm">📋 Rutinas Configuradas</h3>
+      <div id="config-rutinas-list" class="space-y-2"></div>
+      <button onclick="cerrarAdmin()" class="mt-5 text-xs text-gray-400 hover:text-gray-600 underline">🔒 Cerrar sesión admin</button>
+    </div>
+  </div>
+</div>
+
+<!-- SIN LOCAL -->
+<div id="no-local" class="max-w-5xl mx-auto px-4 mt-16 text-center">
+  <div class="text-6xl mb-4">🏪</div>
+  <h2 class="text-xl font-bold text-gray-600 mb-2">Selecciona tu local</h2>
+  <p class="text-gray-400 text-sm">Elige el número de local en el selector de arriba para comenzar.</p>
+</div>
+
+<!-- TOAST + LOADING -->
+<div id="toast" class="hidden fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white max-w-xs"></div>
+<div id="loading" class="hidden fixed inset-0 z-40 bg-white/70 flex items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-xl p-5 flex items-center gap-3">
+    <svg class="animate-spin w-6 h-6 text-[#0053e2]" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+    </svg>
+    <span id="loading-msg" class="text-sm font-medium text-gray-700">Cargando...</span>
+  </div>
+</div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────────────
+const API        = '';          // mismo origen — el servidor sirve este HTML
+const AM_CUT     = 15*60+30;
+const PM_CUT     = 22*60;
+const ADMIN_USER = 'caros';
+const COLORS     = ['#0053e2','#ffc220','#2a8703','#ea1100','#6366f1','#f97316','#06b6d4','#8b5cf6','#ec4899','#14b8a6'];
+
+// ── Estado ──────────────────────────────────────────────────────────────
+let currentLocal='', rutinas=[], checkData={}, drafts={}, charts={};
+let adminOk=false, adminHash='', histCache=null;
+
+// ── Utils ───────────────────────────────────────────────────────────────
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function loading(show, msg='Cargando...') {
+  document.getElementById('loading').classList.toggle('hidden', !show);
+  document.getElementById('loading-msg').textContent = msg;
+}
+
+function toast(msg, ok=true) {
+  const el = document.getElementById('toast');
+  el.className = `fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white max-w-xs ${ok?'bg-[#2a8703]':'bg-[#ea1100]'}`;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+const pctBadge = p => {
+  const c = p===100 ? 'bg-green-100 text-green-700' : p>=60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600';
+  return `<span class="px-2 py-0.5 rounded text-xs font-bold ${c}">${p}%</span>`;
+};
+
+async function sha256(s) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+function getRestr(fecha, turno) {
+  const today = new Date().toISOString().slice(0,10);
+  if (fecha < today) return { allowed:false, reason:'Día anterior — solo lectura.' };
+  if (fecha > today) return { allowed:false, reason:'Fecha futura — no disponible.' };
+  const m = new Date().getHours()*60 + new Date().getMinutes();
+  if (turno==='AM' && m>AM_CUT) return { allowed:false, reason:'Plazo vencido — Turno AM cierra a las 15:30 hrs.' };
+  if (turno==='PM' && m>PM_CUT) return { allowed:false, reason:'Plazo vencido — Turno PM cierra a las 22:00 hrs.' };
+  return { allowed:true, reason:'' };
+}
+
+// ── Fetch helpers ───────────────────────────────────────────────────────
+async function get(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+}
+async function post(path, body) {
+  const r = await fetch(API + path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+}
+async function put(path, body) {
+  const r = await fetch(API + path, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+}
+async function del(path, body) {
+  const r = await fetch(API + path, { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────
+const ALL_TABS = ['hoy','historial','comparar','config'];
+function showTab(tab) {
+  ALL_TABS.forEach(t => {
+    document.getElementById(`tab-content-${t}`).classList.toggle('hidden', t!==tab);
+    const b = document.getElementById(`tab-${t}`);
+    b.classList.toggle('border-[#0053e2]', t===tab);
+    b.classList.toggle('text-[#0053e2]', t===tab);
+    b.classList.toggle('border-transparent', t!==tab);
+    b.classList.toggle('text-gray-500', t!==tab);
+  });
+  if (tab==='historial') loadHistorial();
+  if (tab==='comparar')  loadComparar();
+  if (tab==='config')    renderConfig();
+}
+
+// ── Local ─────────────────────────────────────────────────────────────
+function switchLocal(val) {
+  currentLocal = val;
+  const app = document.getElementById('app-shell');
+  const no  = document.getElementById('no-local');
+  if (!val) { app.classList.add('hidden'); no.classList.remove('hidden'); return; }
+  app.classList.remove('hidden'); no.classList.add('hidden');
+  document.getElementById('local-badge').textContent = `Local ${val}`;
+  document.getElementById('local-badge').classList.remove('hidden');
+  localStorage.setItem('op_last_local', val);
+  showTab('hoy'); loadHoy();
+}
+
+// ── HOY ───────────────────────────────────────────────────────────────
+async function loadHoy() {
+  const fecha = document.getElementById('fecha-hoy').value;
+  if (!fecha || !currentLocal) return;
+  loading(true, 'Cargando check del día...');
+  try {
+    const [ruts, items] = await Promise.all([
+      get('/api/rutinas'),
+      get(`/api/check?local=${currentLocal}&fecha=${fecha}`)
+    ]);
+    rutinas   = ruts;
+    checkData = {};
+    items.forEach(i => { checkData[i.rutina_id] = { done:!!i.done, obs:i.obs||'' }; });
+    renderHoy(fecha);
+  } catch(e) { toast('Error: '+e.message, false); }
+  finally { loading(false); }
+}
+
+function renderHoy(fecha) {
+  const today = new Date().toISOString().slice(0,10);
+  let html = '';
+  if (fecha < today)
+    html += `<div class="mb-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3"><span class="text-2xl">📅</span><p class="text-sm font-bold text-red-700">Día anterior — solo lectura</p></div>`;
+
+  for (const turno of ['AM','PM']) {
+    const tasks  = rutinas.filter(r => r.turno===turno);
+    if (!tasks.length) continue;
+    const restr  = getRestr(fecha, turno), locked = !restr.allowed;
+    const done   = tasks.filter(r => checkData[r.id]?.done).length;
+    const pct    = Math.round(done/tasks.length*100);
+    const pctClr = pct===100?'text-green-600':pct>=60?'text-amber-600':'text-red-500';
+    const accent = turno==='AM'?'border-amber-300 bg-amber-50':'border-blue-300 bg-blue-50';
+    const hdrBg  = turno==='AM'?'bg-amber-100':'bg-blue-100';
+    const lBadge = locked
+      ? '<span class="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-bold">🔒 cerrado</span>'
+      : `<span class="text-xs bg-white/60 text-gray-500 px-2 py-0.5 rounded-full">⏱ cierra ${turno==='AM'?'15:30':'22:00'} hrs</span>`;
+    const pAlert = (locked && fecha===today)
+      ? `<div class="mx-4 mt-2 mb-1 flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2"><span>⏰</span><p class="text-xs text-orange-700 font-semibold">${restr.reason}</p></div>` : '';
+
+    html += `<div class="rounded-xl border ${accent} overflow-hidden shadow-sm">
+      <div class="flex items-center justify-between px-4 py-2.5 ${hdrBg}">
+        <div class="flex items-center gap-2"><h2 class="font-bold text-gray-800 text-sm">🕐 Turno ${turno}</h2>${lBadge}</div>
+        <span class="text-sm font-bold ${pctClr}">${pct}% (${done}/${tasks.length})</span>
+      </div>${pAlert}<div class="divide-y divide-gray-200">`;
+
+    tasks.forEach(r => {
+      const isDone = !!checkData[r.id]?.done;
+      const savedObs = checkData[r.id]?.obs || '';
+      const draftObs = drafts[`${fecha}_${r.id}`] ?? savedObs;
+      let obs;
+      if (isDone) {
+        obs = `<div class="mt-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2"><p class="text-xs font-bold text-green-700 mb-1">📝 Observación:</p><p class="text-xs text-green-800">${esc(savedObs)||'—'}</p></div>`;
+      } else if (locked) {
+        obs = `<div class="mt-2 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"><span class="text-gray-400">🔒</span><p class="text-xs text-gray-400 italic">Período cerrado.</p></div>`;
+      } else {
+        obs = `<div class="mt-2"><label class="text-xs font-semibold text-gray-700 mb-1 flex items-center gap-1">📝 Observación <span class="text-red-500">*</span></label>
+          <textarea id="obs-${r.id}" rows="2" oninput="drafts['${fecha}_${r.id}']=this.value"
+            placeholder="Describe qué verificaste..."
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-[#0053e2] focus:outline-none resize-none">${esc(draftObs)}</textarea>
+          <p id="obs-err-${r.id}" class="text-xs text-red-500 min-h-[1rem] mt-0.5"></p></div>`;
+      }
+      const cb = (locked && !isDone)
+        ? 'disabled class="mt-1 w-4 h-4 cursor-not-allowed opacity-40 flex-shrink-0"'
+        : `onchange="toggleTask('${fecha}',${r.id},this.checked)" class="mt-1 w-4 h-4 accent-[#0053e2] cursor-pointer flex-shrink-0"`;
+      html += `<div class="px-4 py-3 ${isDone?'bg-green-50':locked?'bg-gray-50':'bg-white'}">
+        <div class="flex items-start gap-3">
+          <input type="checkbox" ${isDone?'checked':''} ${cb}/>
+          <div class="flex-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded">${r.horario}</span>
+              <span class="text-sm font-semibold ${isDone?'line-through text-gray-400':locked?'text-gray-400':'text-gray-800'}">${esc(r.rutina)}</span>
+            </div>
+            <p class="text-xs text-gray-600">${esc(r.accionable)}</p>
+            <div class="flex flex-wrap gap-4 mt-1 text-xs text-gray-400">
+              <span>👤 ${esc(r.responsable)}</span><span>📎 ${esc(r.evidencia)}</span>
+            </div>${obs}
+          </div>
+          ${isDone?'<span class="text-green-500 text-xl">✓</span>':''}
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+  document.getElementById('tasks-container').innerHTML = html || '<p class="text-gray-400 text-sm">Sin rutinas configuradas.</p>';
+  updateProgress();
+}
+
+async function toggleTask(fecha, id, checked) {
+  const r = rutinas.find(x => x.id==id);
+  if (r && !getRestr(fecha, r.turno).allowed) { renderHoy(fecha); return; }
+  if (checked) {
+    const obsEl = document.getElementById(`obs-${id}`);
+    const obs   = (obsEl ? obsEl.value : drafts[`${fecha}_${id}`]||'').trim();
+    if (!obs) {
+      if (obsEl) { obsEl.classList.add('border-red-400'); obsEl.focus(); setTimeout(()=>obsEl.classList.remove('border-red-400'),2500); }
+      const eEl = document.getElementById(`obs-err-${id}`);
+      if (eEl) { eEl.textContent='⚠ Ingresa una observación.'; setTimeout(()=>eEl.textContent='',3000); }
+      const cb = document.querySelector(`input[onchange*="${id}"]`); if(cb) cb.checked=false;
+      return;
+    }
+    loading(true, 'Guardando...');
+    try {
+      await post('/api/check', { local:currentLocal, fecha, rutina_id:id, done:true, obs, ts:new Date().toISOString() });
+      checkData[id] = { done:true, obs };
+      delete drafts[`${fecha}_${id}`];
+      toast('✅ Tarea completada');
+    } catch(e) { toast(e.message, false); }
+    finally { loading(false); }
+  } else {
+    const prevObs = checkData[id]?.obs || '';
+    loading(true, 'Guardando...');
+    try {
+      await post('/api/check', { local:currentLocal, fecha, rutina_id:id, done:false, obs:'', ts:new Date().toISOString() });
+      checkData[id] = { done:false, obs:'' };
+      drafts[`${fecha}_${id}`] = prevObs;
+      toast('↩ Desmarcado');
+    } catch(e) { toast(e.message, false); }
+    finally { loading(false); }
+  }
+  renderHoy(fecha);
+}
+
+function updateProgress() {
+  const total = rutinas.length, done = rutinas.filter(r=>checkData[r.id]?.done).length;
+  const pct   = total ? Math.round(done/total*100) : 0;
+  const bar   = document.getElementById('prog-bar');
+  bar.style.width = pct+'%';
+  bar.className = `progress-bar h-3 rounded-full ${pct===100?'bg-[#2a8703]':pct>=60?'bg-[#ffc220]':'bg-[#0053e2]'}`;
+  document.getElementById('prog-label').textContent = `${done} / ${total} tareas`;
+  const pc = pct===100?'text-green-600':pct>=60?'text-amber-500':'text-red-500';
+  document.getElementById('summary-bar').innerHTML = `<span class="text-gray-600">✅ <b>${done}/${total}</b></span><span class="${pc} text-lg font-bold">📊 ${pct}%</span>${pct===100?'<span class="text-green-600">🎉</span>':''}`;
+  document.getElementById('hdr-pct-val').textContent = pct+'%';
+  document.getElementById('header-pct').classList.remove('hidden');
+}
+
+// ── HISTORIAL ─────────────────────────────────────────────────────────
+function calcStats(regs) {
+  const am = rutinas.filter(r=>r.turno==='AM'), pm = rutinas.filter(r=>r.turno==='PM');
+  const done = rutinas.filter(r=>regs[r.id]?.done).length;
+  return {
+    done, total:rutinas.length,
+    pct:  rutinas.length ? Math.round(done/rutinas.length*100) : 0,
+    pctAM: am.length ? Math.round(am.filter(r=>regs[r.id]?.done).length/am.length*100) : 0,
+    pctPM: pm.length ? Math.round(pm.filter(r=>regs[r.id]?.done).length/pm.length*100) : 0,
+  };
+}
+
+async function loadHistorial() {
+  if (!currentLocal) return;
+  document.getElementById('hist-local-label').textContent = `Local ${currentLocal}`;
+  loading(true, 'Cargando historial...');
+  try {
+    const [ruts, stats] = await Promise.all([get('/api/rutinas'), get('/api/stats')]);
+    rutinas = ruts;
+    const byFecha = {};
+    stats.forEach(i => {
+      if (i.local !== currentLocal) return;
+      const f = (i.fecha||'').slice(0,10); if (!f) return;
+      if (!byFecha[f]) byFecha[f] = {};
+      byFecha[f][i.rutina_id] = { done:!!i.done };
+    });
+    histCache = byFecha;
+    const fechas = Object.keys(byFecha).sort().slice(-30);
+    if (!fechas.length) {
+      ['kpi-promedio','kpi-dias','kpi-mejor'].forEach(id => document.getElementById(id).textContent='—');
+      document.getElementById('hist-tbody').innerHTML='<tr><td colspan="6" class="text-center text-gray-400 py-6 text-sm">Sin registros aún.</td></tr>';
+      return;
+    }
+    const statsArr = fechas.map(f => ({fecha:f, ...calcStats(byFecha[f])}));
+    const avg  = Math.round(statsArr.reduce((a,s)=>a+s.pct,0)/statsArr.length);
+    const best = statsArr.reduce((a,s)=>s.pct>a.pct?s:a);
+    document.getElementById('kpi-promedio').textContent = avg+'%';
+    document.getElementById('kpi-dias').textContent     = fechas.length;
+    document.getElementById('kpi-mejor').textContent    = `${best.fecha}\n(${best.pct}%)`;
+    document.getElementById('hist-tbody').innerHTML = [...statsArr].reverse().map(s =>
+      `<tr class="hover:bg-gray-50"><td class="px-3 py-2 font-medium text-gray-700">${s.fecha}</td>
+       <td class="px-3 py-2 text-center">${s.done}</td><td class="px-3 py-2 text-center text-gray-400">${s.total}</td>
+       <td class="px-3 py-2 text-center">${pctBadge(s.pct)}</td>
+       <td class="px-3 py-2 text-center text-xs">${s.pctAM}%</td>
+       <td class="px-3 py-2 text-center text-xs">${s.pctPM}%</td></tr>`
+    ).join('');
+    if (charts.hist) charts.hist.destroy();
+    const ctx = document.getElementById('chart-hist')?.getContext('2d'); if(!ctx) return;
+    charts.hist = new Chart(ctx, {type:'line', data:{labels:fechas,
+      datasets:[{label:'% Cumplimiento',data:statsArr.map(s=>s.pct),borderColor:'#0053e2',backgroundColor:'rgba(0,83,226,0.12)',fill:true,tension:.35,pointBackgroundColor:'#0053e2'}]},
+      options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}}});
+  } catch(e) { toast('Error historial: '+e.message, false); }
+  finally { loading(false); }
+}
+
+function exportarCSV() {
+  if (!histCache) return;
+  const rows = [['Local','Fecha','Completadas','Total','%','AM%','PM%']];
+  Object.keys(histCache).sort().forEach(f => {
+    const s = calcStats(histCache[f]);
+    rows.push([`Local ${currentLocal}`,f,s.done,s.total,s.pct+'%',s.pctAM+'%',s.pctPM+'%']);
+  });
+  const blob = new Blob([rows.map(r=>r.join(',')).join('\n')], {type:'text/csv;charset=utf-8;'});
+  Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`check_local${currentLocal}_${new Date().toISOString().slice(0,10)}.csv`}).click();
+}
+
+// ── COMPARAR ──────────────────────────────────────────────────────────
+async function loadComparar() {
+  loading(true, 'Cargando comparativa...');
+  try {
+    const [ruts, stats] = await Promise.all([get('/api/rutinas'), get('/api/stats')]);
+    rutinas = ruts;
+    const byLocal = {};
+    stats.forEach(i => {
+      const loc = i.local, fecha = (i.fecha||'').slice(0,10);
+      if (!loc||!fecha) return;
+      if (!byLocal[loc]) byLocal[loc]={};
+      if (!byLocal[loc][fecha]) byLocal[loc][fecha]={};
+      byLocal[loc][fecha][i.rutina_id] = { done:!!i.done };
+    });
+    const ranked = Object.entries(byLocal).map(([loc,fechas],idx) => {
+      const vals = Object.values(fechas).map(r=>calcStats(r).pct);
+      return { store:loc, avg:Math.round(vals.reduce((a,v)=>a+v,0)/vals.length), dias:vals.length, color:COLORS[idx%COLORS.length] };
+    }).sort((a,b)=>b.avg-a.avg);
+    if (!ranked.length) { document.getElementById('chart-comparar').parentElement.innerHTML='<p class="text-center text-gray-400 py-12 text-sm">Sin datos aún.</p>'; return; }
+    if (charts.cmp) charts.cmp.destroy();
+    const ctx = document.getElementById('chart-comparar')?.getContext('2d');
+    if (ctx) charts.cmp = new Chart(ctx,{type:'bar',data:{labels:ranked.map(d=>`L${d.store}`),datasets:[{label:'% Promedio',data:ranked.map(d=>d.avg),backgroundColor:ranked.map(d=>d.color),borderRadius:8}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}}});
+    document.getElementById('tabla-comparar').innerHTML = `<table class="w-full text-sm">
+      <thead><tr class="bg-gray-50 text-gray-500 uppercase text-xs">
+        <th class="px-3 py-2 text-left">#</th><th class="px-3 py-2 text-left">Local</th>
+        <th class="px-3 py-2 text-center">Días</th><th class="px-3 py-2 text-center">% Prom.</th>
+      </tr></thead><tbody class="divide-y divide-gray-100">
+      ${ranked.map((d,i)=>`<tr class="${d.store===currentLocal?'bg-blue-50 font-semibold':'hover:bg-gray-50'}">
+        <td class="px-3 py-2 text-gray-400">${['🥇','🥈','🥉'][i]||i+1}</td>
+        <td class="px-3 py-2">Local ${d.store}${d.store===currentLocal?' ← tú':''}</td>
+        <td class="px-3 py-2 text-center text-gray-500">${d.dias}</td>
+        <td class="px-3 py-2 text-center">${pctBadge(d.avg)}</td>
+      </tr>`).join('')}
+      </tbody></table>`;
+  } catch(e) { toast('Error: '+e.message, false); }
+  finally { loading(false); }
+}
+
+// ── ADMIN ─────────────────────────────────────────────────────────────
+async function tabConfig() {
+  if (adminOk) { showTab('config'); return; }
+  document.getElementById('user-input').value='';
+  document.getElementById('pass-input').value='';
+  document.getElementById('pass-error').textContent='';
+  document.getElementById('pass-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('user-input').focus(), 50);
+}
+
+async function submitPass() {
+  const user = document.getElementById('user-input').value.trim();
+  const pass = document.getElementById('pass-input').value;
+  if (!user||!pass) { document.getElementById('pass-error').textContent='Completa los campos.'; return; }
+  adminHash = await sha256(pass);
+  // Verificar con el servidor intentando una operacion trivial
+  try {
+    await post('/api/rutinas', { turno:'AM',horario:'',rutina:'__test__',accionable:'',responsable:'',evidencia:'',orden:-1,
+      usuario:user, password_hash:adminHash });
+    // Si no lanzó error, creó un item de test — lo borramos de inmediato
+    const ruts = await get('/api/rutinas');
+    const test = ruts.find(r=>r.rutina==='__test__');
+    if (test) await del(`/api/rutinas/${test.id}`, { usuario:user, password_hash:adminHash });
+    adminOk = true;
+    closePassModal(); showTab('config');
+  } catch(e) {
+    document.getElementById('pass-error').textContent = '❌ Usuario o contraseña incorrectos.';
+    adminHash = '';
+  }
+}
+
+function closePassModal() { document.getElementById('pass-modal').classList.add('hidden'); }
+function cerrarAdmin()    { adminOk=false; adminHash=''; toast('Sesión admin cerrada.'); showTab('hoy'); }
+
+async function renderConfig() {
+  loading(true, 'Cargando rutinas...');
+  try {
+    const ruts = await get('/api/rutinas');
+    rutinas = ruts;
+    document.getElementById('config-rutinas-list').innerHTML = rutinas.map(r =>
+      `<div class="flex items-start justify-between gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs font-bold px-2 py-0.5 rounded ${r.turno==='AM'?'bg-amber-100 text-amber-700':'bg-blue-100 text-blue-700'}">${r.turno}</span>
+            <span class="text-xs text-gray-400">${esc(r.horario)}</span>
+            <span class="font-semibold text-gray-800">${esc(r.rutina)}</span>
+          </div>
+          <p class="text-xs text-gray-500 truncate">${esc(r.accionable)}</p>
+        </div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <button onclick="editarRutina(${r.id})" class="text-[#0053e2] hover:bg-blue-50 px-2 py-1 rounded text-sm" title="Editar">✏️</button>
+          <button onclick="eliminarRutina(${r.id})" class="text-red-400 hover:text-red-600 text-xl leading-none px-1">×</button>
+        </div>
+      </div>`
+    ).join('') || '<p class="text-gray-400 text-sm">Sin rutinas.</p>';
+  } catch(e) { toast('Error: '+e.message, false); }
+  finally { loading(false); }
+}
+
+function editarRutina(id) {
+  const r = rutinas.find(x=>x.id==id); if(!r) return;
+  document.getElementById('edit-id').value       = r.id;
+  document.getElementById('edit-turno').value    = r.turno;
+  document.getElementById('edit-horario').value  = r.horario;
+  document.getElementById('edit-rutina').value   = r.rutina;
+  document.getElementById('edit-accionable').value  = r.accionable;
+  document.getElementById('edit-responsable').value = r.responsable;
+  document.getElementById('edit-evidencia').value   = r.evidencia;
+  document.getElementById('edit-error').textContent = '';
+  document.getElementById('edit-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('edit-rutina').focus(), 50);
+}
+
+async function guardarEdicion() {
+  const id   = document.getElementById('edit-id').value;
+  const g    = k => document.getElementById(k).value.trim();
+  const errEl = document.getElementById('edit-error');
+  if (!g('edit-rutina')||!g('edit-accionable')) { errEl.textContent='⚠ Nombre y Accionable son obligatorios.'; return; }
+  const r = rutinas.find(x=>x.id==id);
+  loading(true, 'Guardando...');
+  try {
+    await put(`/api/rutinas/${id}`, {
+      turno:g('edit-turno'), horario:g('edit-horario'), rutina:g('edit-rutina'),
+      accionable:g('edit-accionable'), responsable:g('edit-responsable'), evidencia:g('edit-evidencia'),
+      orden: r?.orden ?? 0,
+      usuario:ADMIN_USER, password_hash:adminHash
+    });
+    cerrarEditModal(); toast('✅ Rutina actualizada'); await renderConfig();
+  } catch(e) { errEl.textContent='❌ '+e.message; }
+  finally { loading(false); }
+}
+
+function cerrarEditModal() { document.getElementById('edit-modal').classList.add('hidden'); }
+
+async function agregarRutina() {
+  const g = id => document.getElementById(id).value.trim();
+  if (!g('new-rutina')||!g('new-accionable')) { toast('Rutina y Accionable son obligatorios.',false); return; }
+  const orden = rutinas.length ? Math.max(...rutinas.map(r=>r.orden??0))+1 : 0;
+  loading(true,'Agregando...');
+  try {
+    await post('/api/rutinas', {
+      turno:g('new-turno'), horario:g('new-horario'), rutina:g('new-rutina'),
+      accionable:g('new-accionable'), responsable:g('new-responsable'), evidencia:g('new-evidencia'),
+      orden, usuario:ADMIN_USER, password_hash:adminHash
+    });
+    ['new-horario','new-rutina','new-accionable','new-responsable','new-evidencia'].forEach(id=>document.getElementById(id).value='');
+    toast('✅ Rutina agregada'); await renderConfig();
+  } catch(e) { toast(e.message,false); }
+  finally { loading(false); }
+}
+
+async function eliminarRutina(id) {
+  if (!confirm('¿Eliminar esta rutina?')) return;
+  loading(true,'Eliminando...');
+  try {
+    await del(`/api/rutinas/${id}`, { usuario:ADMIN_USER, password_hash:adminHash });
+    toast('Rutina eliminada'); await renderConfig();
+  } catch(e) { toast(e.message,false); }
+  finally { loading(false); }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────
+document.getElementById('fecha-hoy').value = new Date().toISOString().slice(0,10);
+const saved = localStorage.getItem('op_last_local');
+if (saved) { document.getElementById('local-select').value=saved; switchLocal(saved); }
+</script>
+</body>
+</html>
