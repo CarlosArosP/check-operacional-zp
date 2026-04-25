@@ -27,8 +27,9 @@ ADMIN_HASH = hashlib.sha256(b"Carlett2042").hexdigest()
 # ── Database driver ───────────────────────────────────────────────────
 # Turso en prod (env vars) → SQLite en la nube, datos permanentes.
 # SQLite local en dev → archivo check.db.
-TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "")
-TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "").strip()
+# Elimina cualquier caracter no-ASCII que pueda colarse al copiar desde markdown
+TURSO_TOKEN = "".join(c for c in os.environ.get("TURSO_AUTH_TOKEN", "") if ord(c) < 128).strip()
 
 
 class _TursoRow(dict):
