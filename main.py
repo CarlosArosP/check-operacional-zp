@@ -24,28 +24,120 @@ STATIC   = BASE_DIR / "static"
 ADMIN_USER = "caros"
 ADMIN_HASH = hashlib.sha256(b"Carlett2042").hexdigest()
 
-# ── Database driver ────────────────────────────────────────────────────
-# En producción (Render) se usan variables de entorno TURSO_DATABASE_URL
-# y TURSO_AUTH_TOKEN → SQLite persistente en la nube (gratis, nunca se borra).
-# En desarrollo local cae al archivo check.db.
+# ── Database driver ───────────────────────────────────────────────────
+# Turso en prod (env vars) → SQLite en la nube, datos permanentes.
+# SQLite local en dev → archivo check.db.
 TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "")
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 
-if TURSO_URL:
-    import libsql_experimental as _sql   # drop-in idéntico a sqlite3
-    def _connect():
-        return _sql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
-else:
-    _sql = sqlite3                        # type: ignore[assignment]
-    def _connect():
-        con = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-        con.execute("PRAGMA journal_mode=WAL")
-        return con
+
+class _TursoRow(dict):
+    """Acceso por clave str Y por índice int, igual que sqlite3.Row."""
+    def __init__(self, cols: list, values: list):
+        super().__init__(zip(cols, values))
+        self._v = list(values)
+    def __getitem__(self, key):
+        return self._v[key] if isinstance(key, int) else super().__getitem__(key)
+    def __iter__(self):
+        return iter(self._v)
+
+
+class _TursoCursor:
+    """Resultado de TursoConn.execute() — porta lastrowid y filas."""
+    def __init__(self, rows: list, lastrowid):
+        self._rows    = rows
+        self.lastrowid = lastrowid
+    def fetchall(self):  return self._rows
+    def fetchone(self):  return self._rows[0] if self._rows else None
+    def __getitem__(self, i): return self._rows[i]
+
+
+class TursoConn:
+    """Wrapper sqlite3-compatible sobre la HTTP API de Turso. Sin deps nativos."""
+
+    def __init__(self, db_url: str, token: str):
+        self._url   = db_url.replace("libsql://", "https://") + "/v2/pipeline"
+        self._token = token
+        self.row_factory = None   # aceptado pero ignorado
+
+    # ── helpers ──────────────────────────────────────────────────────
+    @staticmethod
+    def _enc(v):
+        if v is None:            return {"type": "null",    "value": None}
+        if isinstance(v, bool):  return {"type": "integer", "value": str(int(v))}
+        if isinstance(v, int):   return {"type": "integer", "value": str(v)}
+        if isinstance(v, float): return {"type": "float",   "value": str(v)}
+        return {"type": "text", "value": str(v)}
+
+    @staticmethod
+    def _dec(v):
+        t = v["type"]
+        if t == "null":    return None
+        if t == "integer": return int(v["value"])
+        if t == "float":   return float(v["value"])
+        return v["value"]
+
+    def _pipeline(self, stmts: list) -> list:
+        import json, urllib.request
+        body = json.dumps({
+            "requests": [{"type": "execute", "stmt": s} for s in stmts]
+                        + [{"type": "close"}]
+        }).encode()
+        req = urllib.request.Request(
+            self._url, data=body, method="POST",
+            headers={"Authorization": f"Bearer {self._token}",
+                     "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read())["results"]
+
+    def _stmt(self, sql: str, params=()):
+        return {"sql": sql, "args": [self._enc(p) for p in params]}
+
+    def _parse(self, result: dict) -> _TursoCursor:
+        if result["type"] != "ok":
+            raise Exception(f"Turso error: {result}")
+        res  = result["response"]["result"]
+        cols = [c["name"] for c in res["cols"]]
+        rows = [_TursoRow(cols, [self._dec(v) for v in row]) for row in res["rows"]]
+        rid  = res.get("last_insert_rowid")
+        return _TursoCursor(rows, int(rid) if rid else None)
+
+    # ── API pública (compatible con sqlite3) ─────────────────────────
+    def execute(self, sql: str, params=()):
+        return self._parse(self._pipeline([self._stmt(sql, params)])[0])
+
+    def executemany(self, sql: str, seq):
+        results = self._pipeline([self._stmt(sql, p) for p in seq])
+        for r in results:
+            if r["type"] != "ok": raise Exception(f"Turso error: {r}")
+        return self
+
+    def executescript(self, script: str):
+        import re
+        stmts = [
+            self._stmt(s.strip())
+            for s in re.split(r";\s*", script)
+            if s.strip() and not s.strip().startswith("--")
+        ]
+        if not stmts: return self
+        results = self._pipeline(stmts)
+        for r in results:
+            if r["type"] != "ok": raise Exception(f"Turso error: {r}")
+        return self
+
+    def commit(self): pass   # Turso auto-commit por statement
+    def close(self):  pass
+
 
 @contextmanager
 def get_db():
-    con = _connect()
-    con.row_factory = _sql.Row
+    if TURSO_URL:
+        con: Any = TursoConn(TURSO_URL, TURSO_TOKEN)
+    else:
+        con = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA journal_mode=WAL")
     try:
         yield con
         con.commit()
