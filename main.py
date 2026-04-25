@@ -347,6 +347,15 @@ def get_stats():
     return [dict(r) for r in rows]
 
 
+# ── Debug (temporal) ──────────────────────────────────────────────────
+@app.get("/api/debug")
+def debug_info():
+    return {
+        "usando_turso": bool(TURSO_URL),
+        "turso_url": TURSO_URL[:40] + "..." if TURSO_URL else "NO CONFIGURADO",
+        "token_ok": bool(TURSO_TOKEN),
+    }
+
 # ── Startup ────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
