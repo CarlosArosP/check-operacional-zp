@@ -146,35 +146,38 @@ def get_db():
 
 
 def init_db() -> None:
-    with get_db() as db:
-        db.executescript("""
-            CREATE TABLE IF NOT EXISTS rutinas (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                turno       TEXT    NOT NULL CHECK(turno IN ('AM','PM')),
-                horario     TEXT    DEFAULT '',
-                rutina      TEXT    NOT NULL,
-                accionable  TEXT    DEFAULT '',
-                responsable TEXT    DEFAULT '',
-                evidencia   TEXT    DEFAULT '',
-                orden       INTEGER DEFAULT 0,
-                created_at  TEXT    DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS registros (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                local       TEXT    NOT NULL,
-                fecha       TEXT    NOT NULL,
-                rutina_id   INTEGER NOT NULL REFERENCES rutinas(id),
-                done        INTEGER NOT NULL DEFAULT 0,
-                obs         TEXT    DEFAULT '',
-                ts          TEXT    DEFAULT '',
-                UNIQUE(local, fecha, rutina_id)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_reg_local_fecha
-                ON registros(local, fecha);
-        """)
-    _seed_rutinas()
+    if TURSO_URL:
+        # Tablas ya creadas manualmente en Turso — solo sembrar si está vacío
+        _seed_rutinas()
+    else:
+        # SQLite local: crear tablas y sembrar
+        with get_db() as db:
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS rutinas (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turno       TEXT    NOT NULL,
+                    horario     TEXT    DEFAULT '',
+                    rutina      TEXT    NOT NULL,
+                    accionable  TEXT    DEFAULT '',
+                    responsable TEXT    DEFAULT '',
+                    evidencia   TEXT    DEFAULT '',
+                    orden       INTEGER DEFAULT 0,
+                    created_at  TEXT    DEFAULT (datetime('now'))
+                );
+                CREATE TABLE IF NOT EXISTS registros (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    local       TEXT    NOT NULL,
+                    fecha       TEXT    NOT NULL,
+                    rutina_id   INTEGER NOT NULL,
+                    done        INTEGER NOT NULL DEFAULT 0,
+                    obs         TEXT    DEFAULT '',
+                    ts          TEXT    DEFAULT '',
+                    UNIQUE(local, fecha, rutina_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_reg_local_fecha
+                    ON registros(local, fecha)
+            """)
+        _seed_rutinas()
 
 
 def _seed_rutinas() -> None:
@@ -359,4 +362,10 @@ def debug_info():
 # ── Startup ────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
-    init_db()
+    try:
+        init_db()
+    except Exception as e:
+        # Logueamos el error pero NO bloqueamos el arranque del servidor
+        import traceback
+        print(f"[STARTUP WARNING] init_db falló: {e}")
+        traceback.print_exc()
