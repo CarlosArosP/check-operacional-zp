@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
@@ -19,16 +20,32 @@ BASE_DIR = Path(__file__).parent
 DB_PATH  = BASE_DIR / "check.db"
 STATIC   = BASE_DIR / "static"
 
-# ── Admin credentials (sha256 of "Carlett2042") ───────────────────────
+# ── Admin credentials (sha256 de "Carlett2042") ────────────────────────
 ADMIN_USER = "caros"
 ADMIN_HASH = hashlib.sha256(b"Carlett2042").hexdigest()
 
-# ── Database ───────────────────────────────────────────────────────────
+# ── Database driver ────────────────────────────────────────────────────
+# En producción (Render) se usan variables de entorno TURSO_DATABASE_URL
+# y TURSO_AUTH_TOKEN → SQLite persistente en la nube (gratis, nunca se borra).
+# En desarrollo local cae al archivo check.db.
+TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+
+if TURSO_URL:
+    import libsql_experimental as _sql   # drop-in idéntico a sqlite3
+    def _connect():
+        return _sql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+else:
+    _sql = sqlite3                        # type: ignore[assignment]
+    def _connect():
+        con = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        con.execute("PRAGMA journal_mode=WAL")
+        return con
+
 @contextmanager
 def get_db():
-    con = sqlite3.connect(DB_PATH, check_same_thread=False)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
+    con = _connect()
+    con.row_factory = _sql.Row
     try:
         yield con
         con.commit()
@@ -77,21 +94,21 @@ def _seed_rutinas() -> None:
             ("AM","07:30-08:00","Analisis de Datos",
              "Revisar WIC e imprimir planificacion diaria ZP por hora. Revisar disponibilidad Apoyo durante turno AM.",
              "Tesorero","Fotografia al grupo interno",0),
-            ("AM","08:00-08:15","Planificacion Colaciones",
-             "Coordinar con Enc. Local la conexion de Dispo. Apoyo en horas peak / verificar inasistencias.",
-             "Tesorero / Enc. Local","Evidencia fotografica en grupo interno",1),
+            ("AM","08:00-08:15","Planificación Colaciones",
+             "Coordinar con Enc. Local la conexión de Dispo. Apoyo en horas peak / verificar inasistencias.",
+             "Tesorero / Enc. Local","Evidencia fotográfica en grupo interno / adherencia a planificación",1),
             ("AM","12:00-14:00","Control de Colaciones AM",
-             "Verificar conexion de apoyo de tienda.",
-             "Encargado Local","Registro en grupo interno",2),
-            ("PM","14:00-15:00","Entrega de Turno AM",
+             "Verificar conexión de apoyo de tienda.",
+             "Encargado Local","Registro en grupo interno / adherencia a planificación",2),
+            ("PM","14:00-15:00","Entrega de Turno - Adherencia AM",
              "Entrega Adherencia turno AM.",
-             "Tesorero / Enc. Local","Evidencia fotografica turno PM",3),
-            ("PM","14:00-15:00","Planificacion Turno PM",
-             "Planificacion turno PM, apoyos en horas peak y planificacion de EST PM.",
-             "Tesorero / Enc. Local","Evidencia fotografica turno PM",4),
+             "Tesorero / Enc. Local","Evidencia fotográfica turno PM",3),
+            ("PM","14:00-15:00","Planificación Turno PM",
+             "Planificación turno PM, apoyos en horas peak y planificación de EST PM.",
+             "Tesorero / Enc. Local","Evidencia fotográfica turno PM",4),
             ("PM","17:00-19:30","Control de Colaciones PM",
              "Verificar colaciones de dispo. Apoyo.",
-             "Encargado Local","Adherencia a planificacion",5),
+             "Encargado Local","Adherencia a planificación",5),
         ]
         db.executemany(
             "INSERT INTO rutinas(turno,horario,rutina,accionable,responsable,evidencia,orden) VALUES(?,?,?,?,?,?,?)",
