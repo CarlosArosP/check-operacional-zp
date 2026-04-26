@@ -282,7 +282,7 @@ async function sha256(s) {
 }
 
 function getRestr(fecha, turno) {
-  const today = new Date().toISOString().slice(0,10);
+const today = localToday();
   if (fecha < today) return { allowed:false, reason:'Día anterior — solo lectura.' };
   if (fecha > today) return { allowed:false, reason:'Fecha futura — no disponible.' };
   const m = new Date().getHours()*60 + new Date().getMinutes();
@@ -361,7 +361,7 @@ async function loadHoy() {
 }
 
 function renderHoy(fecha) {
-  const today = new Date().toISOString().slice(0,10);
+const today = localToday();
   let html = '';
   if (fecha < today)
     html += `<div class="mb-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3"><span class="text-2xl">📅</span><p class="text-sm font-bold text-red-700">Día anterior — solo lectura</p></div>`;
@@ -540,7 +540,7 @@ function exportarCSV() {
     rows.push([`Local ${currentLocal}`,f,s.done,s.total,s.pct+'%',s.pctAM+'%',s.pctPM+'%']);
   });
   const blob = new Blob([rows.map(r=>r.join(',')).join('\n')], {type:'text/csv;charset=utf-8;'});
-  Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`check_local${currentLocal}_${new Date().toISOString().slice(0,10)}.csv`}).click();
+  Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`check_local${currentLocal}_${localToday()}.csv`}).click();
 }
 
 // ── COMPARAR ──────────────────────────────────────────────────────────
@@ -786,7 +786,12 @@ async function eliminarRutina(id) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
-document.getElementById('fecha-hoy').value = new Date().toISOString().slice(0,10);
+// Usa fecha LOCAL del navegador (no UTC) para evitar desfase en zonas -3/-4
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+document.getElementById('fecha-hoy').value = localToday();
 const saved = localStorage.getItem('op_last_local');
 if (saved) { document.getElementById('local-select').value=saved; switchLocal(saved); }
 </script>
