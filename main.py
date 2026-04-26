@@ -351,27 +351,6 @@ def get_stats():
     return [dict(r) for r in rows]
 
 
-# ── Debug (temporal) ──────────────────────────────────────────────────
-@app.get("/api/debug")
-def debug_info():
-    import traceback as _tb
-    result: dict = {
-        "usando_turso": bool(TURSO_URL),
-        "turso_url": TURSO_URL[:50] + "..." if TURSO_URL else "NO CONFIGURADO",
-        "token_ok": bool(TURSO_TOKEN),
-    }
-    try:
-        with get_db() as db:
-            n = db.execute("SELECT COUNT(*) FROM rutinas").fetchone()
-            result["count_raw"]   = repr(n)
-            result["count_0"]     = repr(n[0]) if n else None
-            rows = db.execute("SELECT id, turno, rutina FROM rutinas ORDER BY orden LIMIT 3").fetchall()
-            result["sample"]      = [dict(r) for r in rows]
-    except Exception as e:
-        result["db_error"] = str(e)
-        result["trace"]    = _tb.format_exc()
-    return result
-
 # ── Startup ────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
