@@ -341,12 +341,18 @@ def save_check(body: RegistroIn):
 
 # ── Stats ──────────────────────────────────────────────────────────────
 @app.get("/api/stats")
-def get_stats():
-    corte = (date.today() - timedelta(days=30)).isoformat()
+def get_stats(fecha_desde: str = "", fecha_hasta: str = ""):
+    """Retorna registros en el rango [fecha_desde, fecha_hasta].
+    Si no se pasan, usa los últimos 30 días (comportamiento original)."""
+    if not fecha_desde:
+        fecha_desde = (date.today() - timedelta(days=30)).isoformat()
+    if not fecha_hasta:
+        fecha_hasta = date.today().isoformat()
     with get_db() as db:
         rows = db.execute(
-            "SELECT local, fecha, rutina_id, done FROM registros WHERE fecha>=?",
-            (corte,),
+            "SELECT local, fecha, rutina_id, done FROM registros"
+            " WHERE fecha>=? AND fecha<=?",
+            (fecha_desde, fecha_hasta),
         ).fetchall()
     return [dict(r) for r in rows]
 
